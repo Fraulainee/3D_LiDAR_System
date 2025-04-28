@@ -1,0 +1,8 @@
+<launch>
+    <node pkg="stair_detection" type="stair_detector_node.py" name="stair_detector_node" output="screen"/>
+    
+    <node pkg="stair_detection" type="plane_segmentation.py" name="plane_segmentation" output="screen"/>
+
+    <node pkg="stair_detection" type="stair_info_node.py" name="stair_info_node" output="screen"/>
+</launch>
+
