@@ -230,7 +230,9 @@ def stair_detection_callback(msg):
     marker.id = 0
     marker.type = Marker.LINE_LIST
     marker.action = Marker.ADD
-    marker.scale.x = 0.05
+    marker.scale.x = 0.1
+    marker.scale.y = 0.1
+    marker.scale.z = 0.1
     marker.color.a = 1.0
     marker.color.r = 0.0
     marker.color.g = 1.0
@@ -276,7 +278,7 @@ def stair_detection_callback(msg):
 
     # Publish stair detection status
     if stair_count >= 2:
-        rospy.loginfo(f"STAIRS DETECTED: {stair_count} risers found.")
+        # rospy.loginfo(f"STAIRS DETECTED: {stair_count} risers found.")
         stair_pub.publish(Bool(data=True))
     else:
         # rospy.loginfo("No stairs detected in this frame.")
