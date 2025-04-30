@@ -76,7 +76,11 @@ def livox_callback(msg):
 
     for pt in msg.points:
         x, y, z = pt.x, pt.y, pt.z
+        # x = -(x)
+        # z = -(z)
         intensity = float(pt.reflectivity)
+        # filtered_points.append([x, y, z, intensity])
+        
 
         if abs(y) < threshold and x > 0:
             filtered_points.append([x, y, z, intensity])
@@ -92,10 +96,10 @@ def livox_callback(msg):
         PointField('intensity', 12, PointField.FLOAT32, 1),
     ]
 
-    if (now - last_pub_time).to_sec() >= 0.5:
-        cloud_msg = pc2.create_cloud(header, fields, filtered_points)
-        pub.publish(cloud_msg)
-        last_pub_time = now
+    # if (now - last_pub_time).to_sec() >= 0.5:
+    cloud_msg = pc2.create_cloud(header, fields, filtered_points)
+    pub.publish(cloud_msg)
+        # last_pub_time = now
 
 
 if __name__ == '__main__':

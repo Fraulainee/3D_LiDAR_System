@@ -7,6 +7,6 @@
     
     <!-- <node pkg="stair_detection" type="final_stair.py" name="final_stair" output="screen"/> -->
 
-    <node pkg="stair_detection" type="stair_info_node.py" name="stair_info_node" output="screen"/>
+    <!-- <node pkg="stair_detection" type="stair_info_node.py" name="stair_info_node" output="screen"/> -->
 </launch>
 
