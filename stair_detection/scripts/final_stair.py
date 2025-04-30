@@ -12,7 +12,6 @@ from geometry_msgs.msg import Point
 
 
 def stair_detection_callback(msg):
-    # Step 1: Read the points
     points = pc2.read_points(msg, field_names=("x", "y", "z"), skip_nans=True)
     xz_points = [(x, y, z) for x, y, z in points]
 
@@ -37,6 +36,7 @@ def stair_detection_callback(msg):
         [k, idx, _] = kd_tree.search_radius_vector_3d(point, search_radius)
         if k >= min_neighbors:
             filtered_indices.append(i)
+            
 
     if len(filtered_indices) < 10:
         rospy.logwarn("Too few dense points after filtering.")

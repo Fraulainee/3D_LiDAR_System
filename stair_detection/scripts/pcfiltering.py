@@ -35,6 +35,6 @@ if __name__ == '__main__':
 
     filter = rospy.Publisher('/livox/pcfilter', PointCloud2, queue_size=1)
 
-    rospy.Subscriber('/livox/xz_plane', PointCloud2, pointcloud_callback)
+    rospy.Subscriber('/cloud_registered', PointCloud2, pointcloud_callback)
 
     rospy.spin()

@@ -230,9 +230,9 @@ def stair_detection_callback(msg):
     marker.id = 0
     marker.type = Marker.LINE_LIST
     marker.action = Marker.ADD
-    marker.scale.x = 0.1
-    marker.scale.y = 0.1
-    marker.scale.z = 0.1
+    marker.scale.x = 0.05
+    marker.scale.y = 0.05
+    marker.scale.z = 0.05
     marker.color.a = 1.0
     marker.color.r = 0.0
     marker.color.g = 1.0
@@ -247,14 +247,14 @@ def stair_detection_callback(msg):
     # Plane segmentation loop
     while len(pcd.points) > 30:
         plane_model, inliers = pcd.segment_plane(
-            distance_threshold=0.02,
+            distance_threshold=0.06,
             ransac_n=3,
             num_iterations=1000
         )
 
         [a, b, c, d] = plane_model
+        # print(plane_model)
 
-        # Only vertical planes (a close to 0, c dominant)
         if abs(a) < 0.8 and abs(c) > 0.5:
             stair_count += 1
 

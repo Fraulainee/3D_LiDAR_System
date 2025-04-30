@@ -1,0 +1,6 @@
+<launch>
+
+    <node pkg="stair_detection" type="pcfiltering.py" name="pcfiltering" output="screen"/>
+
+
+</launch>
