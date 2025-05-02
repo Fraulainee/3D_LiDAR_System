@@ -1,65 +1,5 @@
 #!/usr/bin/env python3
 
-# import rospy
-# import math
-# from livox_ros_driver2.msg import CustomMsg
-# from sensor_msgs.msg import PointCloud2, PointField
-# import sensor_msgs.point_cloud2 as pc2
-# import std_msgs.msg
-
-
-
-# def livox_callback(msg):
-#     threshold = 0.20
-
-#     filtered_points = []
-
-#     for pt in msg.points:
-#         x, y, z = pt.x, pt.y, pt.z
-#         intensity = float(pt.reflectivity)
-#         # filtered_points.append([x, y, z, intensity])
-
-
-#         # rospy.loginfo(f"y={pt}")
-
-#         if abs(y) < threshold and x > 0:
-#             filtered_points.append([x, y, z, intensity])
-#             # filtered_points.append([x, y, z])
-
-#     # total_points = len(filtered_points)
-#     # rospy.loginfo(f"Filtered XZ Front Points: {total_points}")
-
-#     # Create PointCloud2 msg
-#     header = std_msgs.msg.Header()
-#     header.stamp = rospy.Time.now()
-#     header.frame_id = msg.header.frame_id  # Usually "livox_frame" or "map"
-    
-#     fields = [
-#         PointField('x', 0, PointField.FLOAT32, 1),
-#         PointField('y', 4, PointField.FLOAT32, 1),
-#         PointField('z', 8, PointField.FLOAT32, 1),
-#         PointField('intensity', 12, PointField.FLOAT32, 1),
-#     ]
-
-#     cloud_msg = pc2.create_cloud(header, fields, filtered_points)
-#     # cloud_msg = pc2.create_cloud_xyz32(header, filtered_points)
-    
-
-#     pub.publish(cloud_msg)
-
-
-# if __name__ == '__main__':
-#     rospy.init_node('livox_xz_plane_node')
-
-#     pub = rospy.Publisher('/livox/xz_plane', PointCloud2, queue_size=1)
-
-#     rospy.Subscriber('/livox/lidar', CustomMsg, livox_callback)
-#     rospy.loginfo("Listening to /livox/lidar - Filtering XZ Plane Front Points...")
-
-#     rospy.spin()
-
-
-
 import rospy
 import math
 from livox_ros_driver2.msg import CustomMsg
@@ -67,47 +7,97 @@ from sensor_msgs.msg import PointCloud2, PointField
 import sensor_msgs.point_cloud2 as pc2
 import std_msgs.msg
 
-def livox_callback(msg):
-    global last_pub_time
-    threshold = 0.20
-    filtered_points = []
 
-    now = rospy.Time.now()
+
+def livox_callback(msg):
+    threshold = 0.01
+
+    filtered_points = []
 
     for pt in msg.points:
         x, y, z = pt.x, pt.y, pt.z
-        # x = -(x)
-        # z = -(z)
-        intensity = float(pt.reflectivity)
-        # filtered_points.append([x, y, z, intensity])
-        
+
+
+        # rospy.loginfo(f"y={pt}")
 
         if abs(y) < threshold and x > 0:
-            filtered_points.append([x, y, z, intensity])
+            filtered_points.append([x, y, z])
 
+    # total_points = len(filtered_points)
+    # rospy.loginfo(f"Filtered XZ Front Points: {total_points}")
+
+    # Create PointCloud2 msg
     header = std_msgs.msg.Header()
     header.stamp = rospy.Time.now()
-    header.frame_id = msg.header.frame_id
+    header.frame_id = msg.header.frame_id  # Usually "livox_frame" or "map"
+    
 
-    fields = [
-        PointField('x', 0, PointField.FLOAT32, 1),
-        PointField('y', 4, PointField.FLOAT32, 1),
-        PointField('z', 8, PointField.FLOAT32, 1),
-        PointField('intensity', 12, PointField.FLOAT32, 1),
-    ]
+    cloud_msg = pc2.create_cloud_xyz32(header, filtered_points)
+    
 
-    # if (now - last_pub_time).to_sec() >= 0.5:
-    cloud_msg = pc2.create_cloud(header, fields, filtered_points)
     pub.publish(cloud_msg)
-        # last_pub_time = now
 
 
 if __name__ == '__main__':
     rospy.init_node('livox_xz_plane_node')
-    global last_pub_time
-    last_pub_time = rospy.Time.now()
 
     pub = rospy.Publisher('/livox/xz_plane', PointCloud2, queue_size=1)
+
     rospy.Subscriber('/livox/lidar', CustomMsg, livox_callback)
     rospy.loginfo("Listening to /livox/lidar - Filtering XZ Plane Front Points...")
+
     rospy.spin()
+
+
+
+# import rospy
+# import math
+# from livox_ros_driver2.msg import CustomMsg
+# from sensor_msgs.msg import PointCloud2, PointField
+# import sensor_msgs.point_cloud2 as pc2
+# import std_msgs.msg
+
+# def livox_callback(msg):
+#     global last_pub_time
+#     threshold = 0.15
+#     filtered_points = []
+
+#     now = rospy.Time.now()
+
+#     for pt in msg.points:
+#         x, y, z = pt.x, pt.y, pt.z
+#         # x = -(x)
+#         # z = -(z)
+#         intensity = float(pt.reflectivity)
+#         # filtered_points.append([x, y, z, intensity])
+        
+
+#         if abs(y) < threshold and x > 0:
+#             filtered_points.append([x, y, z, intensity])
+
+#     header = std_msgs.msg.Header()
+#     header.stamp = rospy.Time.now()
+#     header.frame_id = msg.header.frame_id
+
+#     fields = [
+#         PointField('x', 0, PointField.FLOAT32, 1),
+#         PointField('y', 4, PointField.FLOAT32, 1),
+#         PointField('z', 8, PointField.FLOAT32, 1),
+#         PointField('intensity', 12, PointField.FLOAT32, 1),
+#     ]
+
+#     # if (now - last_pub_time).to_sec() >= 0.5:
+#     cloud_msg = pc2.create_cloud(header, fields, filtered_points)
+#     pub.publish(cloud_msg)
+#         # last_pub_time = now
+
+
+# if __name__ == '__main__':
+#     rospy.init_node('livox_xz_plane_node')
+#     global last_pub_time
+#     last_pub_time = rospy.Time.now()
+
+#     pub = rospy.Publisher('/livox/xz_plane', PointCloud2, queue_size=1)
+#     rospy.Subscriber('/livox/lidar', CustomMsg, livox_callback)
+#     rospy.loginfo("Listening to /livox/lidar - Filtering XZ Plane Front Points...")
+#     rospy.spin()

@@ -29,21 +29,36 @@ def stair_info_callback(msg):
         dx = x - prev_x
 
         if dz >= min_step_height and dz <= max_step_height and dx >= min_step_depth:
-            dz = (dz - 0.1265) * 100
+            dz = (dz - 0.10) 
+            dz = abs(dz) * 100
+            x = abs(dx) * 100
+            x = math.sqrt(x**2 - dz**2)
+
             angle = math.degrees(math.atan(dz / x))
-            stair_msg = StairInfo()
-            stair_msg.distance = x  
-            stair_msg.height = dz
-            stair_msg.angle = angle
-            
 
-            # rospy.loginfo(f"First Stair Detected: Distance={x:.2f} cm Height={dz:.2f} cm Angle={angle:.2f} degrees")
-            # rospy.loginfo(f"First Stair Detected: Height={dz:.2f} cm Angle={angle:.2f} degrees")
+            # Store values for averaging
+            if not hasattr(stair_info_callback, "data_buffer"):
+                stair_info_callback.data_buffer = []
 
-            
-            stair_info_pub.publish(stair_msg)
+            stair_info_callback.data_buffer.append((x, dz, angle))
 
-            return  
+            # Keep only the last 15 data points
+            if len(stair_info_callback.data_buffer) > 15:
+                stair_info_callback.data_buffer.pop(0)
+
+            # Calculate averages
+            if len(stair_info_callback.data_buffer) == 15:
+                avg_x = sum(item[0] for item in stair_info_callback.data_buffer) / 15
+                avg_dz = sum(item[1] for item in stair_info_callback.data_buffer) / 15
+                avg_angle = sum(item[2] for item in stair_info_callback.data_buffer) / 15
+
+                stair_msg = StairInfo()
+                stair_msg.distance = avg_x  
+                stair_msg.height = avg_dz
+                stair_msg.angle = avg_angle
+
+                rospy.loginfo(f"Averaged Stair Info: Distance={avg_x:.2f} cm Height={avg_dz:.2f} cm Angle={avg_angle:.2f} degrees")
+                stair_info_pub.publish(stair_msg)
 
         prev_z = z
         prev_x = x
