@@ -1,0 +1,5 @@
+<launch>
+    <node pkg="stair_detection" type="planesegmentation.py" name="node_name" output="screen"/>
+
+</launch>
+

@@ -1,0 +1,8 @@
+<!-- Stair detection with downsampling -->
+
+
+<launch>
+    <node pkg="stair_detection" type="plane_segmentation.py" name="plane_segmentation" output="screen"/>
+    <node pkg="stair_detection" type="newStairDetect.py" name="adaptive_stair_detector" output="screen"/>
+    <node pkg="stair_detection" type="downsampled.py" name="downsample_livox_node" output="screen"/>
+</launch>

@@ -1,0 +1,9 @@
+<launch>
+    <node pkg="stair_detection" type="ransacSegment.py" name="ransac_plane_segmenter" output="screen"/>
+        <!-- <param name="input_topic" value="/camera/depth/points"/>
+        <param name="output_topic" value="/stair_detection/segments"/>
+        <param name="min_segment_size" value="100"/>
+        <param name="max_segment_size" value="10000"/>
+        <param name="ransac_iterations" value="1000"/>
+        <param name="ransac_distance_threshold" value="0.01"/> -->
+</launch>

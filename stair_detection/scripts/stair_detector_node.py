@@ -7,95 +7,447 @@ from sensor_msgs.msg import PointCloud2
 from std_msgs.msg import Bool
 from visualization_msgs.msg import Marker
 from geometry_msgs.msg import Point
+import numpy as np
+from stair_detection.msg import StairInfo
+
+last_pub_time = rospy.Time(0)
+log_height_buffer = []
+BUFFER_SIZE = 20
+active_log_height = 0.0  
 
 
-def stair_detection_callback(msg):
-    min_step_height = 0.1
-    max_step_height = 0.19
-    min_step_depth = 0.29
+def log_detection_callback(msg):
+    global last_pub_time
+    now = rospy.Time.now()
+    global active_log_height
+    global log_height_buffer
+
 
     points = pc2.read_points(msg, field_names=("x", "y", "z"), skip_nans=True)
-    xz_points = [(x, z) for x, y, z in points]
+    xz_points = [(x, z) for x, y, z in points if x > 0]
 
     if len(xz_points) < 10:
-        stair_pub.publish(Bool(data=False))
+        log_pub.publish(Bool(data=False))
         return
 
-    xz_points.sort(key=lambda p: p[0])
+    # Convert to numpy array for filtering
+    xz_np = np.array(xz_points)
 
-    step_count = 0
-    prev_x, prev_z = xz_points[0]
+    # Estimate bounding box of the elevated log object
+    z_median = np.median(xz_np[:, 1])
+    z_thresh_min = z_median - 0.15
+    z_thresh_max = z_median + 0.15
 
-    # Line marker for all detected risers
+    log_candidates = xz_np[(xz_np[:, 1] >= z_thresh_min) & (xz_np[:, 1] <= z_thresh_max)]
+
+    if len(log_candidates) < 20:
+        log_pub.publish(Bool(data=False))
+        return
+
+    # Calculate log properties
+    center_x = np.mean(log_candidates[:, 0])
+    base_z = np.min(log_candidates[:, 1])
+    top_z = np.max(log_candidates[:, 1])
+    log_height = top_z - base_z + 0.045
+    distance = math.sqrt(center_x**2 + base_z**2) - 0.10
+    
+
+
+    log_height_buffer.append(log_height)
+    if len(log_height_buffer) > BUFFER_SIZE:
+        log_height_buffer.pop(0)  
+
+    max_recent_height = max(log_height_buffer)
+
+    # Update active log height only when a new max is detected
+    # if max_recent_height > active_log_height:
+    #     active_log_height = max_recent_height
+    #     rospy.loginfo(f"🔺 New active log height: {active_log_height:.2f} m")
+    #     log_pub.publish(Bool(data=True))
+    # else:
+    #     log_pub.publish(Bool(data=False))
+
+
+    # test = max_recent_height/ distance
+    angle_deg = math.degrees(math.atan2(max_recent_height, distance))
+    rospy.loginfo(f"Log detected: height = {max_recent_height:.3f} m, distance = {distance:.3f} m, angle = {angle_deg:.2f} degrees")
+
+
+    if (now - last_pub_time).to_sec() >= 2.0: 
+
+        stair_msg = StairInfo()
+        stair_msg.distance = distance
+        stair_msg.height = max_recent_height
+        stair_msg.angle = angle_deg
+
+        stair_info_pub.publish(stair_msg)
+
+        last_pub_time = now
+
+    # Create vertical marker to visualize log
     marker = Marker()
     marker.header.frame_id = msg.header.frame_id
     marker.header.stamp = rospy.Time.now()
-    marker.ns = "stairs"
+    marker.ns = "log_marker"
     marker.id = 0
     marker.type = Marker.LINE_LIST
     marker.action = Marker.ADD
-    marker.scale.x = 0.02
+    marker.scale.x = 0.03
     marker.color.a = 1.0
-    marker.color.r = 1.0
+    marker.color.r = 0.0
     marker.color.g = 1.0
-    marker.color.b = 0.0
+    marker.color.b = 1.0
     marker.pose.orientation.w = 1.0
 
-    for x, z in xz_points[1:]:
-        dz = z - prev_z
-        dx = x - prev_x
-
-        if min_step_height <= dz <= max_step_height and dx >= min_step_depth:
-            step_count += 1
-
-            # Add line marker
-            p1 = Point(x, 0, prev_z)
-            p2 = Point(x, 0, z)
-            marker.points.append(p1)
-            marker.points.append(p2)
-
-            # Add text marker for height label
-            text_marker = Marker()
-            text_marker.header.frame_id = msg.header.frame_id
-            text_marker.header.stamp = rospy.Time.now()
-            text_marker.ns = "step_text"
-            text_marker.id = step_count
-            text_marker.type = Marker.TEXT_VIEW_FACING
-            text_marker.action = Marker.ADD
-            text_marker.pose.position.x = x
-            text_marker.pose.position.y = 0
-            text_marker.pose.position.z = z + 0.1
-            text_marker.scale.z = 0.2
-            text_marker.color.r = 1.0
-            text_marker.color.g = 1.0
-            text_marker.color.b = 1.0
-            text_marker.color.a = 1.0
-            text_marker.text = f"{abs(dz):.2f} m"
-
-            marker_text_pub.publish(text_marker)
-
-            prev_z = z
-            prev_x = x
+    p1 = Point(center_x, 0.0, base_z)
+    p2 = Point(center_x, 0.0, top_z)
+    marker.points.append(p1)
+    marker.points.append(p2)
 
     marker_pub.publish(marker)
-
-    if step_count >= 2:
-        stair_pub.publish(Bool(data=True))
-    else:
-        stair_pub.publish(Bool(data=False))
+    log_pub.publish(Bool(data=True))
 
 
 if __name__ == '__main__':
-    rospy.init_node('stair_detector_node')
+    rospy.init_node('log_detector_node')
 
-    rospy.Subscriber('/livox/xz_plane', PointCloud2, stair_detection_callback)
+    rospy.Subscriber('/livox/xz_plane', PointCloud2, log_detection_callback)
 
-    stair_pub = rospy.Publisher('/stairs_detected', Bool, queue_size=1)
-    marker_pub = rospy.Publisher('/stair_markers', Marker, queue_size=1)
-    marker_text_pub = rospy.Publisher('/step_text_markers', Marker, queue_size=10)
+    log_pub = rospy.Publisher('/log_detected', Bool, queue_size=1)
+    marker_pub = rospy.Publisher('/log_marker', Marker, queue_size=1)
+    stair_info_pub = rospy.Publisher('/stair_info', StairInfo, queue_size=1)
 
-    rospy.loginfo("Stair Detection Node Started...")
+    rospy.loginfo("Log Detection Node Started...")
     rospy.spin()
+
+
+# import rospy
+# import sensor_msgs.point_cloud2 as pc2
+# from sensor_msgs.msg import PointCloud2
+# from std_msgs.msg import Bool
+# from visualization_msgs.msg import Marker
+# from geometry_msgs.msg import Point
+# import numpy as np
+
+# def log_detection_callback(msg):
+#     points = pc2.read_points(msg, field_names=("x", "y", "z"), skip_nans=True)
+#     xz_points = [(x, z) for x, y, z in points if x > 0]
+
+#     if len(xz_points) < 10:
+#         log_pub.publish(Bool(data=False))
+#         return
+
+#     # Convert to numpy array for filtering
+#     xz_np = np.array(xz_points)
+
+#     # Estimate bounding box of the elevated log object
+#     z_median = np.median(xz_np[:, 1])
+#     z_thresh_min = z_median - 0.05
+#     z_thresh_max = z_median + 0.05
+
+#     log_candidates = xz_np[(xz_np[:, 1] >= z_thresh_min) & (xz_np[:, 1] <= z_thresh_max)]
+
+#     if len(log_candidates) < 20:
+#         log_pub.publish(Bool(data=False))
+#         return
+
+#     # Calculate log center and height
+#     center_x = np.mean(log_candidates[:, 0])
+#     base_z = np.min(log_candidates[:, 1])
+#     top_z = np.max(log_candidates[:, 1])
+#     log_height = top_z - base_z + 0.03
+
+#     rospy.loginfo(f"Log detected: height = {log_height:.3f} m, center_x = {center_x:.3f}")
+
+#     # Create vertical marker to visualize log
+#     marker = Marker()
+#     marker.header.frame_id = msg.header.frame_id
+#     marker.header.stamp = rospy.Time.now()
+#     marker.ns = "log_marker"
+#     marker.id = 0
+#     marker.type = Marker.LINE_LIST
+#     marker.action = Marker.ADD
+#     marker.scale.x = 0.03
+#     marker.color.a = 1.0
+#     marker.color.r = 0.0
+#     marker.color.g = 1.0
+#     marker.color.b = 1.0
+#     marker.pose.orientation.w = 1.0
+
+#     p1 = Point(center_x, 0.0, base_z)
+#     p2 = Point(center_x, 0.0, top_z)
+#     marker.points.append(p1)
+#     marker.points.append(p2)
+
+#     marker_pub.publish(marker)
+#     log_pub.publish(Bool(data=True))
+
+
+# if __name__ == '__main__':
+#     rospy.init_node('log_detector_node')
+
+#     rospy.Subscriber('/livox/xz_plane', PointCloud2, log_detection_callback)
+
+#     log_pub = rospy.Publisher('/log_detected', Bool, queue_size=1)
+#     marker_pub = rospy.Publisher('/log_marker', Marker, queue_size=1)
+
+#     rospy.loginfo("Log Detection Node Started...")
+#     rospy.spin()
+
+
+# import rospy
+# import sensor_msgs.point_cloud2 as pc2
+# from sensor_msgs.msg import PointCloud2
+# from std_msgs.msg import Bool
+# from visualization_msgs.msg import Marker
+# from geometry_msgs.msg import Point
+# import numpy as np
+
+# def log_detection_callback(msg):
+#     points = pc2.read_points(msg, field_names=("x", "y", "z"), skip_nans=True)
+#     xz_points = [(x, z) for x, y, z in points if x > 0]
+
+#     if len(xz_points) < 10:
+#         log_pub.publish(Bool(data=False))
+#         return
+
+#     # Convert to numpy array for filtering
+#     xz_np = np.array(xz_points)
+
+#     # Estimate bounding box of the elevated log object
+#     z_median = np.median(xz_np[:, 1])
+#     z_thresh_min = z_median - 0.05
+#     z_thresh_max = z_median + 0.05
+
+#     log_candidates = xz_np[(xz_np[:, 1] >= z_thresh_min) & (xz_np[:, 1] <= z_thresh_max)]
+
+#     if len(log_candidates) < 20:
+#         log_pub.publish(Bool(data=False))
+#         return
+
+#     # Calculate log center
+#     center_x = np.mean(log_candidates[:, 0])
+#     base_z = np.min(log_candidates[:, 1])
+#     top_z = np.max(log_candidates[:, 1])
+
+#     # Create vertical marker to visualize log
+#     marker = Marker()
+#     marker.header.frame_id = msg.header.frame_id
+#     marker.header.stamp = rospy.Time.now()
+#     marker.ns = "log_marker"
+#     marker.id = 0
+#     marker.type = Marker.LINE_LIST
+#     marker.action = Marker.ADD
+#     marker.scale.x = 0.03
+#     marker.color.a = 1.0
+#     marker.color.r = 0.0
+#     marker.color.g = 1.0
+#     marker.color.b = 1.0
+#     marker.pose.orientation.w = 1.0
+
+#     p1 = Point(center_x, 0.0, base_z)
+#     p2 = Point(center_x, 0.0, top_z)
+#     marker.points.append(p1)
+#     marker.points.append(p2)
+
+#     marker_pub.publish(marker)
+#     log_pub.publish(Bool(data=True))
+
+
+# if __name__ == '__main__':
+#     rospy.init_node('log_detector_node')
+
+#     rospy.Subscriber('/livox/xz_plane', PointCloud2, log_detection_callback)
+
+#     log_pub = rospy.Publisher('/log_detected', Bool, queue_size=1)
+#     marker_pub = rospy.Publisher('/log_marker', Marker, queue_size=1)
+
+#     rospy.loginfo("Log Detection Node Started...")
+#     rospy.spin()
+
+
+# import rospy
+# import math
+# import sensor_msgs.point_cloud2 as pc2
+# from sensor_msgs.msg import PointCloud2
+# from std_msgs.msg import Bool
+# from visualization_msgs.msg import Marker
+# from geometry_msgs.msg import Point
+
+
+# def stair_detection_callback(msg):
+#     min_step_height = 0.9
+#     max_step_height = 0.12
+#     min_step_depth = 0.10
+
+#     points = pc2.read_points(msg, field_names=("x", "y", "z"), skip_nans=True)
+#     xz_points = [(x, z) for x, y, z in points]
+
+#     if len(xz_points) < 10:
+#         stair_pub.publish(Bool(data=False))
+#         return
+
+#     xz_points.sort(key=lambda p: p[0])
+
+#     step_count = 0
+#     prev_x, prev_z = xz_points[0]
+
+#     # Line marker for all detected risers
+#     marker = Marker()
+#     marker.header.frame_id = msg.header.frame_id
+#     marker.header.stamp = rospy.Time.now()
+#     marker.ns = "stairs"
+#     marker.id = 0
+#     marker.type = Marker.LINE_LIST
+#     marker.action = Marker.ADD
+#     marker.scale.x = 0.02
+#     marker.color.a = 1.0
+#     marker.color.r = 1.0
+#     marker.color.g = 1.0
+#     marker.color.b = 0.0
+#     marker.pose.orientation.w = 1.0
+    
+#     for x, z in xz_points[1:]:
+#         dz = z - prev_z
+#         dx = x - prev_x
+
+#         # rospy.loginfo(f"dx={dx:.4f} m, dz={dz:.4f} m z ={z:.4f} m x={x:.4f} m")
+
+#         if min_step_height <= dz <= max_step_height and dx >= min_step_depth:
+#             step_count += 1
+
+#             # Add line marker
+#             p1 = Point(x, 0, prev_z)
+#             p2 = Point(x, 0, z)
+#             marker.points.append(p1)
+#             marker.points.append(p2)
+
+#             # Add text marker for height label
+#             text_marker = Marker()
+#             text_marker.header.frame_id = msg.header.frame_id
+#             text_marker.header.stamp = rospy.Time.now()
+#             text_marker.ns = "step_text"
+#             text_marker.id = step_count
+#             text_marker.type = Marker.TEXT_VIEW_FACING
+#             text_marker.action = Marker.ADD
+#             text_marker.pose.position.x = x
+#             text_marker.pose.position.y = 0
+#             text_marker.pose.position.z = z + 0.1
+#             text_marker.scale.z = 0.2
+#             text_marker.color.r = 1.0
+#             text_marker.color.g = 1.0
+#             text_marker.color.b = 1.0
+#             text_marker.color.a = 1.0
+#             text_marker.text = f"{abs(dz):.2f} m"
+
+#             marker_text_pub.publish(text_marker)
+
+#             prev_z = z
+#             prev_x = x
+
+#     marker_pub.publish(marker)
+
+#     if step_count >= 2:
+#         stair_pub.publish(Bool(data=True))
+#     else:
+#         stair_pub.publish(Bool(data=False))
+
+
+# if __name__ == '__main__':
+#     rospy.init_node('stair_detector_node')
+
+#     rospy.Subscriber('/livox/xz_plane', PointCloud2, stair_detection_callback)
+
+#     stair_pub = rospy.Publisher('/stairs_detected', Bool, queue_size=1)
+#     marker_pub = rospy.Publisher('/stair_markers', Marker, queue_size=1)
+#     marker_text_pub = rospy.Publisher('/step_text_markers', Marker, queue_size=10)
+
+#     rospy.loginfo("Stair Detection Node Started...")
+#     rospy.spin()
+
+
+
+# import rospy
+# import math
+# import sensor_msgs.point_cloud2 as pc2
+# from sensor_msgs.msg import PointCloud2
+# from std_msgs.msg import ColorRGBA
+# from std_msgs.msg import Bool
+# from visualization_msgs.msg import Marker
+# from geometry_msgs.msg import Point
+
+
+# def stair_detection_callback(msg):
+#     min_step_height = 0.1
+#     max_step_height = 0.19
+#     min_step_depth = 0.29
+
+#     points = pc2.read_points(msg, field_names=("x", "y", "z"), skip_nans=True)
+#     xz_points = [(x, y, z) for x, y, z in points]
+
+#     if len(xz_points) < 10:
+#         return
+
+#     xz_points.sort(key=lambda p: p[0])
+
+#     step_count = 0
+#     prev_x, prev_z = xz_points[0][0], xz_points[0][2]
+
+#     # Add a marker for the points with a different color
+#     point_marker = Marker()
+#     point_marker.header.frame_id = msg.header.frame_id
+#     point_marker.header.stamp = rospy.Time.now()
+#     point_marker.ns = "point_markers"
+#     point_marker.id = 0
+#     point_marker.type = Marker.POINTS
+#     point_marker.action = Marker.ADD
+#     point_marker.scale.x = 0.02
+#     point_marker.scale.y = 0.02
+#     point_marker.scale.z = 0.02
+#     point_marker.color.a = 1.0
+#     point_marker.pose.orientation.w = 1.0
+    
+#     for x, y, z in xz_points[1:]:
+#         dz = z - prev_z
+#         dx = x - prev_x
+
+        
+#         pt = Point()
+#         pt.x = dx
+#         pt.y = 0
+#         pt.z = dz
+#         point_marker.points.append(pt)
+
+#         total = abs(dx) + abs(dz)
+#         r = abs(dx) / total if total > 0 else 0.5
+#         b = abs(dz) / total if total > 0 else 0.5
+
+#         color = ColorRGBA()
+#         color.r = r
+#         color.g = 0.0
+#         color.b = b
+#         color.a = 1.0
+#         point_marker.colors.append(color)
+
+#         if min_step_height <= dz <= max_step_height and dx >= min_step_depth:
+#             step_count += 1
+#             prev_z = z
+#             prev_x = x
+
+#         rospy.loginfo(f"dx={dx:.4f} m, dz={dz:.4f} m z ={z:.4f} m x={x:.4f} m")
+
+#     marker_pub.publish(point_marker)
+
+    
+# if __name__ == '__main__':
+#     rospy.init_node('stair_detector_node')
+
+#     rospy.Subscriber('/livox/xz_plane', PointCloud2, stair_detection_callback)
+
+#     marker_pub = rospy.Publisher('/stair_markers', Marker, queue_size=1)
+
+#     rospy.loginfo("Stair Detection Node Started...")
+#     rospy.spin()
 
 
 
