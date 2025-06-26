@@ -14,7 +14,9 @@ last_pub_time = rospy.Time(0)
 log_height_buffer = []
 BUFFER_SIZE = 20
 active_log_height = 0.0  
-
+defdistance = 1000
+defHeight = 0.0
+defAngle = 0.0
 
 def log_detection_callback(msg):
     global last_pub_time
@@ -28,6 +30,17 @@ def log_detection_callback(msg):
 
     if len(xz_points) < 10:
         log_pub.publish(Bool(data=False))
+        # rospy.loginfo("No log points detected in this frame. Distance is set to default {defdistance:.2f} m")
+        if (now - last_pub_time).to_sec() >= 2.0: 
+
+            stair_msg = StairInfo()
+            stair_msg.distance = defdistance
+            stair_msg.height = defHeight
+            stair_msg.angle = defAngle
+
+            stair_info_pub.publish(stair_msg)
+
+            last_pub_time = now
         return
 
     # Convert to numpy array for filtering
@@ -48,25 +61,17 @@ def log_detection_callback(msg):
     center_x = np.mean(log_candidates[:, 0])
     base_z = np.min(log_candidates[:, 1])
     top_z = np.max(log_candidates[:, 1])
-    log_height = top_z - base_z + 0.045
-    distance = math.sqrt(center_x**2 + base_z**2) - 0.10
+    log_height = top_z - base_z + 0.065
+    distance = math.sqrt(center_x**2 + base_z**2)
     
 
 
     log_height_buffer.append(log_height)
     if len(log_height_buffer) > BUFFER_SIZE:
-        log_height_buffer.pop(0)  
+        log_height_buffer.pop(0) 
+    
 
     max_recent_height = max(log_height_buffer)
-
-    # Update active log height only when a new max is detected
-    # if max_recent_height > active_log_height:
-    #     active_log_height = max_recent_height
-    #     rospy.loginfo(f"🔺 New active log height: {active_log_height:.2f} m")
-    #     log_pub.publish(Bool(data=True))
-    # else:
-    #     log_pub.publish(Bool(data=False))
-
 
     # test = max_recent_height/ distance
     angle_deg = math.degrees(math.atan2(max_recent_height, distance))
@@ -106,6 +111,88 @@ def log_detection_callback(msg):
 
     marker_pub.publish(marker)
     log_pub.publish(Bool(data=True))
+
+
+# def log_detection_callback(msg):
+#     global last_pub_time
+#     global log_height_buffer
+
+#     now = rospy.Time.now()
+
+#     # Extract y and z values for points in right-forward narrow view
+#     points = pc2.read_points(msg, field_names=("x", "y", "z"), skip_nans=True)
+#     yz_points = [(y, z) for x, y, z in points if 1.0 > y > 0.1 and z < 0.5 and 0.05 > x > 0]
+
+#     if len(yz_points) < 5:
+#         log_pub.publish(Bool(data=False))
+#         return
+
+#     yz_np = np.array(yz_points)
+
+#     # Direct height measurement using Z bounds
+#     z_min = np.min(yz_np[:, 1])
+#     z_max = np.max(yz_np[:, 1])
+#     log_height = z_max - z_min
+
+#     # Only accept if height is at least 5cm
+#     if log_height < 0.05:
+#         log_pub.publish(Bool(data=False))
+#         return
+
+#     # Optional smoothing: store last 20 log heights
+#     log_height_buffer.append(log_height)
+#     if len(log_height_buffer) > BUFFER_SIZE:
+#         log_height_buffer.pop(0)
+
+#     max_recent_height = max(log_height_buffer)
+
+#     center_y = np.mean(yz_np[:, 0])
+#     distance = center_y
+#     angle_deg = math.degrees(math.atan2(max_recent_height, distance))
+
+#     rospy.loginfo(f"Obstacle detected: height = {max_recent_height:.3f} m, distance = {distance:.3f} m, angle = {angle_deg:.2f}°")
+
+#     # Publish stair message
+#     if (now - last_pub_time).to_sec() >= 2.0:
+#         stair_msg = StairInfo()
+#         stair_msg.distance = distance
+#         stair_msg.height = max_recent_height
+#         stair_msg.angle = angle_deg
+#         stair_info_pub.publish(stair_msg)
+#         last_pub_time = now
+
+#     # Publish RViz Marker (vertical line at detected obstacle)
+#     marker = Marker()
+#     marker.header.frame_id = msg.header.frame_id
+#     marker.header.stamp = rospy.Time.now()
+#     marker.ns = "log_marker"
+#     marker.id = 0
+#     marker.type = Marker.LINE_LIST
+#     marker.action = Marker.ADD
+#     marker.scale.x = 0.03  # line width
+#     marker.color.r = 0.0
+#     marker.color.g = 1.0
+#     marker.color.b = 1.0
+#     marker.color.a = 1.0
+#     marker.pose.orientation.w = 1.0
+
+#     # Line from base_z to top_z at center_y (y-axis)
+#     p1 = Point()
+#     p1.x = 0.025  # x midpoint in range (0, 0.05)
+#     p1.y = center_y
+#     p1.z = z_min
+
+#     p2 = Point()
+#     p2.x = 0.025
+#     p2.y = center_y
+#     p2.z = z_max
+
+#     marker.points.append(p1)
+#     marker.points.append(p2)
+
+#     marker_pub.publish(marker)
+#     log_pub.publish(Bool(data=True))
+
 
 
 if __name__ == '__main__':

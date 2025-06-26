@@ -67,8 +67,10 @@ def livox_callback(msg):
         intensity = float(pt.reflectivity)
         # filtered_points.append([x, y, z, intensity])
         
+        
 
-        if abs(y) < threshold and  1.2 > x > 0:
+        if abs(y) < threshold and 0.5 > x > 0.05:
+        # if 1.0 > y > 0.1 and z < 0.25 and abs(x) < threshold:
             filtered_points.append([x, y, z, intensity])
 
     header = std_msgs.msg.Header()
