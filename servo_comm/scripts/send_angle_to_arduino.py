@@ -20,34 +20,29 @@ class ServoAngleController:
 
     def stair_info_callback(self, msg):
         distance = msg.distance
-        
-        if distance <= 0.3:
-            rospy.loginfo("Distance is less than or equal to 0.3m, moving to position [92, 92]")
-            # self.x1 = 92
-            # self.y1 = 92
-            # self.smooth_move(self.x1, self.y1)
-            # return
            
-        target_angle = int(max(0, min(180, msg.angle)))
-        target_angle = target_angle + 0.05
+        angle = int(max(0, min(180, msg.angle)))
+        target_angle = int(angle + 0.05)
         # target_angle = (90 - target_angle) 
+        # rospy.loginfo("Received log info: distance=%.2f, angle=%d", distance, angle)
 
-        xp = (1.09667* target_angle) + 40.30
-        yp =  (-1.08667* target_angle) +  235.8
-        xp = max(0, min(270, xp)); yp = max(0, min(270, yp))
-        rospy.loginfo("Target angle: %d, Mapped coordinates: (%.2f, %.2f)", target_angle, xp, yp)
+        if target_angle != 0:
+            xp = (1.09667* target_angle) + 40.30
+            yp =  (-1.08667* target_angle) +  235.8
+            xp = max(0, min(270, xp)); yp = max(0, min(270, yp))
+            rospy.loginfo("Target angle: %d, Mapped coordinates: (%.2f, %.2f)", target_angle, xp, yp)
 
-        x2 = int(xp * 180.0 / 270.0)
-        y2 = int(yp * 180.0 / 270.0)
-        rospy.loginfo("Mapped target: [%d, %d]", x2, y2)
+            x2 = int(xp * 180.0 / 270.0)
+            y2 = int(yp * 180.0 / 270.0)
+            rospy.loginfo("Mapped target: [%d, %d]", x2, y2)
 
-        self.smooth_move(x2, y2)
+            self.smooth_move(x2, y2)
 
-        # if distance <= 0.2:
-        #     rospy.loginfo("Distance is less than 0.2m, moving to position [42, 41]")
-        #     self.x1 = 42
-        #     self.y1 = 41
-        #     self.smooth_move(self.x1, self.y1)
+            # if distance <= 0.2:
+            #     rospy.loginfo("Distance is less than 0.2m, moving to position [42, 41]")
+            #     self.x1 = 42
+            #     self.y1 = 41
+            #     self.smooth_move(self.x1, self.y1)
 
     def smooth_move(self, x2, y2):
         while not rospy.is_shutdown() and (self.x1 != x2 or self.y1 != y2):
