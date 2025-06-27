@@ -69,7 +69,7 @@ def livox_callback(msg):
         
         
 
-        if abs(y) < threshold and 0.5 > x > 0.05:
+        if abs(y) < threshold and 0.8 > x > 0.05:
         # if 1.0 > y > 0.1 and z < 0.25 and abs(x) < threshold:
             filtered_points.append([x, y, z, intensity])
 
