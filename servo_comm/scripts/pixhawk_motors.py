@@ -46,7 +46,20 @@ def main():
     while not rospy.is_shutdown():
         print(f"Current Distance: {lidar_distance:.2f}")
 
-        if lidar_distance < 300:
+        att = vehicle.attitude
+        roll = att.roll   
+        pitch = att.pitch
+        yaw = att.yaw
+
+        # Convert to degrees for readability (optional)
+        roll_deg = roll * 57.2958
+        pitch_deg = pitch * 57.2958
+        yaw_deg = yaw * 57.2958
+
+        print(f"Attitude -> Roll: {roll_deg:.2f}°, Pitch: {pitch_deg:.2f}°, Yaw: {yaw_deg:.2f}°")
+
+
+        if lidar_distance < 0.350:
             vehicle.channels.overrides = {'1': 1500}     
         else:
             vehicle.channels.overrides = {'1': 1700}
@@ -54,4 +67,5 @@ def main():
         rate.sleep()
 
 if __name__ == '__main__':
+    # log_pub = rospy.Publisher('/log_detected', Bool, queue_size=1)
     main()
