@@ -1,0 +1,4 @@
+<launch>
+    <node pkg="servo_comm" type="test_servo.py" name="manual_angle_publisher" output="screen"/>
+</launch>
+

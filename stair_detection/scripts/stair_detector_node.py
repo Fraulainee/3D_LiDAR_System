@@ -24,72 +24,63 @@ def log_detection_callback(msg):
     global active_log_height
     global log_height_buffer
 
-
     points = pc2.read_points(msg, field_names=("x", "y", "z"), skip_nans=True)
     xz_points = [(x, z) for x, y, z in points if x > 0]
 
     if len(xz_points) < 10:
         log_pub.publish(Bool(data=False))
-        # rospy.loginfo("No log points detected in this frame. Distance is set to default {defdistance:.2f} m")
-        if (now - last_pub_time).to_sec() >= 2.0: 
-
+        if (now - last_pub_time).to_sec() >= 2.0:
             stair_msg = StairInfo()
             stair_msg.distance = defdistance
             stair_msg.height = defHeight
             stair_msg.angle = defAngle
-
             stair_info_pub.publish(stair_msg)
-
             last_pub_time = now
         return
 
-    # Convert to numpy array for filtering
+    # Convert to numpy array for processing
     xz_np = np.array(xz_points)
 
-    # Estimate bounding box of the elevated log object
+    # Detect local elevated region (log candidate)
     z_median = np.median(xz_np[:, 1])
-    z_thresh_min = z_median - 0.15
-    z_thresh_max = z_median + 0.15
+    z_thresh_min = z_median - 0.02  # reduced from 0.15
+    z_thresh_max = z_median + 0.04  # asymmetric range helps detect upward bumps
 
     log_candidates = xz_np[(xz_np[:, 1] >= z_thresh_min) & (xz_np[:, 1] <= z_thresh_max)]
 
-    if len(log_candidates) < 20:
+    if len(log_candidates) < 10:  # reduced threshold for sparse detection
         log_pub.publish(Bool(data=False))
         return
 
-    # Calculate log properties
+    # Calculate object properties
     center_x = np.mean(log_candidates[:, 0])
     base_z = np.min(log_candidates[:, 1])
     top_z = np.max(log_candidates[:, 1])
-    log_height = top_z - base_z + 0.065
+    log_height = top_z - base_z + 0.09
     distance = math.sqrt(center_x**2 + base_z**2)
-    
 
+    if log_height < 0.015:  # reject almost-flat surfaces
+        log_pub.publish(Bool(data=False))
+        return
 
     log_height_buffer.append(log_height)
     if len(log_height_buffer) > BUFFER_SIZE:
-        log_height_buffer.pop(0) 
-    
+        log_height_buffer.pop(0)
 
     max_recent_height = max(log_height_buffer)
 
-    # test = max_recent_height/ distance
     angle_deg = math.degrees(math.atan2(max_recent_height, distance))
     rospy.loginfo(f"Log detected: height = {max_recent_height:.3f} m, distance = {distance:.3f} m, angle = {angle_deg:.2f} degrees")
 
-
-    if (now - last_pub_time).to_sec() >= 2.0: 
-
+    if (now - last_pub_time).to_sec() >= 2.0:
         stair_msg = StairInfo()
         stair_msg.distance = distance
         stair_msg.height = max_recent_height
         stair_msg.angle = angle_deg
-
         stair_info_pub.publish(stair_msg)
-
         last_pub_time = now
 
-    # Create vertical marker to visualize log
+    # Marker for RViz
     marker = Marker()
     marker.header.frame_id = msg.header.frame_id
     marker.header.stamp = rospy.Time.now()
@@ -111,6 +102,7 @@ def log_detection_callback(msg):
 
     marker_pub.publish(marker)
     log_pub.publish(Bool(data=True))
+
 
 
 # def log_detection_callback(msg):
