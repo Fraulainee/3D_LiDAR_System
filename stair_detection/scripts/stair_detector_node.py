@@ -1,5 +1,108 @@
 #!/usr/bin/env python3
 
+# import rospy
+# import math
+# import sensor_msgs.point_cloud2 as pc2
+# from sensor_msgs.msg import PointCloud2
+# from std_msgs.msg import Bool
+# from visualization_msgs.msg import Marker
+# from geometry_msgs.msg import Point
+# import numpy as np
+# from stair_detection.msg import StairInfo
+
+# last_pub_time = rospy.Time(0)
+# log_height_buffer = []
+# BUFFER_SIZE = 20
+# active_log_height = 0.0  
+# defdistance = 1000
+# defHeight = 0.0
+# defAngle = 0.0
+
+# def log_detection_callback(msg):
+#     global last_pub_time
+#     now = rospy.Time.now()
+#     global active_log_height
+#     global log_height_buffer
+
+#     points = pc2.read_points(msg, field_names=("x", "y", "z"), skip_nans=True)
+#     xz_points = [(x, z) for x, y, z in points if x > 0]
+
+#     if len(xz_points) < 10:
+#         log_pub.publish(Bool(data=False))
+#         if (now - last_pub_time).to_sec() >= 2.0:
+#             stair_msg = StairInfo()
+#             stair_msg.distance = defdistance
+#             stair_msg.height = defHeight
+#             stair_msg.angle = defAngle
+#             stair_info_pub.publish(stair_msg)
+#             last_pub_time = now
+#         return
+
+#     # Convert to numpy array for processing
+#     xz_np = np.array(xz_points)
+
+#     # Detect local elevated region (log candidate)
+#     z_median = np.median(xz_np[:, 1])
+#     z_thresh_min = z_median - 0.15  # reduced from 0.15
+#     z_thresh_max = z_median + 0.15  # asymmetric range helps detect upward bumps
+
+#     log_candidates = xz_np[(xz_np[:, 1] >= z_thresh_min) & (xz_np[:, 1] <= z_thresh_max)]
+
+#     if len(log_candidates) < 10:  # reduced threshold for sparse detection
+#         log_pub.publish(Bool(data=False))
+#         return
+
+#     # Calculate object properties
+#     center_x = np.mean(log_candidates[:, 0])
+#     base_z = np.min(log_candidates[:, 1])
+#     top_z = np.max(log_candidates[:, 1])
+#     log_height = top_z - base_z + 0.09
+#     distance = math.sqrt(center_x**2 + base_z**2)
+
+#     if log_height < 0.015:  # reject almost-flat surfaces
+#         log_pub.publish(Bool(data=False))
+#         return
+
+#     log_height_buffer.append(log_height)
+#     if len(log_height_buffer) > BUFFER_SIZE:
+#         log_height_buffer.pop(0)
+
+#     max_recent_height = max(log_height_buffer)
+
+#     angle_deg = math.degrees(math.atan2(max_recent_height, distance))
+#     rospy.loginfo(f"Log detected: height = {max_recent_height:.3f} m, distance = {distance:.3f} m, angle = {angle_deg:.2f} degrees")
+
+#     if (now - last_pub_time).to_sec() >= 2.0:
+#         stair_msg = StairInfo()
+#         stair_msg.distance = distance
+#         stair_msg.height = max_recent_height
+#         stair_msg.angle = angle_deg
+#         stair_info_pub.publish(stair_msg)
+#         last_pub_time = now
+
+#     # Marker for RViz
+#     marker = Marker()
+#     marker.header.frame_id = msg.header.frame_id
+#     marker.header.stamp = rospy.Time.now()
+#     marker.ns = "log_marker"
+#     marker.id = 0
+#     marker.type = Marker.LINE_LIST
+#     marker.action = Marker.ADD
+#     marker.scale.x = 0.03
+#     marker.color.a = 1.0
+#     marker.color.r = 0.0
+#     marker.color.g = 1.0
+#     marker.color.b = 1.0
+#     marker.pose.orientation.w = 1.0
+
+#     p1 = Point(center_x, 0.0, base_z)
+#     p2 = Point(center_x, 0.0, top_z)
+#     marker.points.append(p1)
+#     marker.points.append(p2)
+
+#     marker_pub.publish(marker)
+#     log_pub.publish(Bool(data=True))
+
 import rospy
 import math
 import sensor_msgs.point_cloud2 as pc2
@@ -17,9 +120,31 @@ active_log_height = 0.0
 defdistance = 1000
 defHeight = 0.0
 defAngle = 0.0
+consecutive_miss_counter = 0
+MISS_THRESHOLD = 3  # Number of consecutive frames to confirm absence
+
+def generate_text_marker(height, x, z, frame_id, marker_id=1):
+    marker = Marker()
+    marker.header.frame_id = frame_id
+    marker.header.stamp = rospy.Time.now()
+    marker.ns = "log_marker_text"
+    marker.id = marker_id
+    marker.type = Marker.TEXT_VIEW_FACING
+    marker.action = Marker.ADD
+    marker.pose.position.x = x
+    marker.pose.position.y = 0.0
+    marker.pose.position.z = z + 0.1 # Slightly above top of the log
+    marker.pose.orientation.w = 1.0
+    marker.scale.z = 0.1  # Text size
+    marker.color.a = 1.0
+    marker.color.r = 1.0
+    marker.color.g = 0.0
+    marker.color.b = 0.0
+    marker.text = f"{height:.2f} m, {x:.2f} m away"
+    return marker
 
 def log_detection_callback(msg):
-    global last_pub_time
+    global last_pub_time, consecutive_miss_counter
     now = rospy.Time.now()
     global active_log_height
     global log_height_buffer
@@ -27,39 +152,44 @@ def log_detection_callback(msg):
     points = pc2.read_points(msg, field_names=("x", "y", "z"), skip_nans=True)
     xz_points = [(x, z) for x, y, z in points if x > 0]
 
-    if len(xz_points) < 10:
-        log_pub.publish(Bool(data=False))
-        if (now - last_pub_time).to_sec() >= 2.0:
-            stair_msg = StairInfo()
-            stair_msg.distance = defdistance
-            stair_msg.height = defHeight
-            stair_msg.angle = defAngle
-            stair_info_pub.publish(stair_msg)
-            last_pub_time = now
+    if len(xz_points) < 5:
+        consecutive_miss_counter += 1
+        # rospy.logwarn(f"Low point count: {len(xz_points)} (miss #{consecutive_miss_counter})")
+
+        if consecutive_miss_counter >= MISS_THRESHOLD:
+            log_pub.publish(Bool(data=False))
+            if (now - last_pub_time).to_sec() >= 2.0:
+                stair_msg = StairInfo()
+                stair_msg.distance = defdistance
+                stair_msg.height = defHeight
+                stair_msg.angle = defAngle
+                stair_info_pub.publish(stair_msg)
+                last_pub_time = now
         return
+    else:
+        # Reset the miss counter when sufficient points are seen
+        consecutive_miss_counter = 0
 
-    # Convert to numpy array for processing
     xz_np = np.array(xz_points)
-
-    # Detect local elevated region (log candidate)
     z_median = np.median(xz_np[:, 1])
-    z_thresh_min = z_median - 0.02  # reduced from 0.15
-    z_thresh_max = z_median + 0.04  # asymmetric range helps detect upward bumps
+    z_thresh_min = z_median - 0.15
+    z_thresh_max = z_median + 0.15
 
     log_candidates = xz_np[(xz_np[:, 1] >= z_thresh_min) & (xz_np[:, 1] <= z_thresh_max)]
 
-    if len(log_candidates) < 10:  # reduced threshold for sparse detection
+    if len(log_candidates) < 10:
         log_pub.publish(Bool(data=False))
+        # rospy.loginfo("Not enough log candidates detected")
         return
 
-    # Calculate object properties
     center_x = np.mean(log_candidates[:, 0])
     base_z = np.min(log_candidates[:, 1])
     top_z = np.max(log_candidates[:, 1])
-    log_height = top_z - base_z + 0.09
+    log_height = top_z - base_z + 0.1
     distance = math.sqrt(center_x**2 + base_z**2)
+    distance = distance - 0.025
 
-    if log_height < 0.015:  # reject almost-flat surfaces
+    if log_height < 0.015:
         log_pub.publish(Bool(data=False))
         return
 
@@ -72,35 +202,38 @@ def log_detection_callback(msg):
     angle_deg = math.degrees(math.atan2(max_recent_height, distance))
     rospy.loginfo(f"Log detected: height = {max_recent_height:.3f} m, distance = {distance:.3f} m, angle = {angle_deg:.2f} degrees")
 
-    if (now - last_pub_time).to_sec() >= 2.0:
-        stair_msg = StairInfo()
-        stair_msg.distance = distance
-        stair_msg.height = max_recent_height
-        stair_msg.angle = angle_deg
-        stair_info_pub.publish(stair_msg)
-        last_pub_time = now
+    # if (now - last_pub_time).to_sec() >= 2.0:
+    stair_msg = StairInfo()
+    stair_msg.distance = distance
+    stair_msg.height = max_recent_height
+    stair_msg.angle = angle_deg
+    stair_info_pub.publish(stair_msg)
+        # last_pub_time = now
 
-    # Marker for RViz
-    marker = Marker()
-    marker.header.frame_id = msg.header.frame_id
-    marker.header.stamp = rospy.Time.now()
-    marker.ns = "log_marker"
-    marker.id = 0
-    marker.type = Marker.LINE_LIST
-    marker.action = Marker.ADD
-    marker.scale.x = 0.03
-    marker.color.a = 1.0
-    marker.color.r = 0.0
-    marker.color.g = 1.0
-    marker.color.b = 1.0
-    marker.pose.orientation.w = 1.0
+    # LINE marker
+    line_marker = Marker()
+    line_marker.header.frame_id = msg.header.frame_id
+    line_marker.header.stamp = rospy.Time.now()
+    line_marker.ns = "log_marker"
+    line_marker.id = 0
+    line_marker.type = Marker.LINE_LIST
+    line_marker.action = Marker.ADD
+    line_marker.scale.x = 0.03
+    line_marker.color.a = 1.0
+    line_marker.color.r = 1.0
+    line_marker.color.g = 0.0
+    line_marker.color.b = 1.0
+    line_marker.pose.orientation.w = 1.0
 
     p1 = Point(center_x, 0.0, base_z)
     p2 = Point(center_x, 0.0, top_z)
-    marker.points.append(p1)
-    marker.points.append(p2)
+    line_marker.points.append(p1)
+    line_marker.points.append(p2)
 
-    marker_pub.publish(marker)
+    text_marker = generate_text_marker(max_recent_height, center_x, top_z, msg.header.frame_id)
+
+    marker_pub.publish(line_marker)
+    marker_pub.publish(text_marker)
     log_pub.publish(Bool(data=True))
 
 
@@ -194,7 +327,7 @@ if __name__ == '__main__':
 
     log_pub = rospy.Publisher('/log_detected', Bool, queue_size=1)
     marker_pub = rospy.Publisher('/log_marker', Marker, queue_size=1)
-    stair_info_pub = rospy.Publisher('/stair_info', StairInfo, queue_size=1)
+    stair_info_pub = rospy.Publisher('/log_info', StairInfo, queue_size=1)
 
     rospy.loginfo("Log Detection Node Started...")
     rospy.spin()

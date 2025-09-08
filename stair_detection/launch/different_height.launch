@@ -1,0 +1,10 @@
+<launch>
+  <node pkg="stair_detection" type="plane_segmentation.py" name="plane_segmentation" output="screen"/>
+
+  <node pkg="stair_detection" type="different_height.py" name="log_detector_node" output="screen">
+    <param name="min_points_per_band" value="20"/>
+    <param name="min_centroid_sep_x"  value="0.06"/>
+    <param name="min_height_diff"     value="0.06"/>
+    <param name="z_window"            value="0.15"/>
+  </node>
+</launch>

@@ -1,5 +1,5 @@
 <launch>
-    <node pkg="stair_detection" type="planesegmentation.py" name="node_name" output="screen"/>
+    <node pkg="stair_detection" type="plane_segmentation.py" name="node_name" output="screen"/>
 
 </launch>
 

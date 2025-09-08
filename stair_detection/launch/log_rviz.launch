@@ -1,5 +1,5 @@
 <launch>
-  <arg name="rviz_config" default="$(find YOUR_PACKAGE_NAME)/rviz/log_view.rviz" />
+  <arg name="rviz_config" default="$(find stair_detection)/rviz/log_view.rviz" />
 
   <node name="rviz" pkg="rviz" type="rviz" output="screen"
         args="-d $(arg rviz_config)" />

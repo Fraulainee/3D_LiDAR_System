@@ -55,7 +55,7 @@ import std_msgs.msg
 
 def livox_callback(msg):
     global last_pub_time
-    threshold = 0.05
+    threshold = 0.1
     filtered_points = []
 
     now = rospy.Time.now()
@@ -69,7 +69,7 @@ def livox_callback(msg):
         
         
 
-        if abs(y) < threshold and 0.8 > x > 0.05:
+        if abs(y) < threshold and 1.5 > x > 0.05 and z < 0.2:
         # if 1.0 > y > 0.1 and z < 0.25 and abs(x) < threshold:
             filtered_points.append([x, y, z, intensity])
 

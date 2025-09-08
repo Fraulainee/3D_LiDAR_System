@@ -1,0 +1,38 @@
+Panels:
+  - Class: rviz/Displays
+    Name: Displays
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz/Grid
+      Name: Grid
+    - Class: rviz/PointCloud2
+      Name: Livox PointCloud
+      Enabled: true
+      Topic: /livox/xz_plane
+      Queue Size: 10
+      Color Transformer: Intensity
+      Style: Flat Squares
+      Point Size: 0.03
+    - Class: rviz/Marker
+      Name: Log Marker
+      Enabled: true
+      Topic: /log_marker
+      Queue Size: 100
+  Enabled: true
+  Global Options:
+    Fixed Frame: livox_frame
+  Name: root
+  Tools:
+    - Class: rviz/MoveCamera
+    - Class: rviz/Interact
+    - Class: rviz/Select
+    - Class: rviz/SetGoal
+    - Class: rviz/SetInitialPose
+    - Class: rviz/Measure
+  Views:
+    Current:
+      Class: rviz/Orbit
+      Distance: 5.0
+      Target Frame: livox_frame
+      Name: Orbit (livox_frame)
