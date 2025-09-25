@@ -1,4 +1,5 @@
 <launch>
-    <node pkg="servo_comm" type="send_angle_to_arduino.py" name="servo_angle_sender" output="screen"/>
+    <node pkg="servo_comm" type="updated_servo_angle.py" name="servo_angle_sender" output="screen"/>
+    <!-- <node pkg="servo_comm" type="send_angle_to_arduino.py" name="servo_angle_sender" output="screen"/> -->
 </launch>
 

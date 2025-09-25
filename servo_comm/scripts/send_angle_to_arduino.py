@@ -104,8 +104,8 @@ class ServoAngleController:
         # self.last_target_angle = self.target_angle
 
     def set_target_angle(self, angle):
-        xp = (1.076 * angle) + 50.36
-        yp = (-1.08 * angle) + 222.2
+        xp = (1.09778 * angle) + 35.76
+        yp = (-1.10476 * angle) + 229.36
         xp = max(0, min(270, xp))
         yp = max(0, min(270, yp))
         self.target_x = int(xp * 180.0 / 270.0)
