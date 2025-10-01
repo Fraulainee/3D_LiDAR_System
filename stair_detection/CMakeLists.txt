@@ -54,8 +54,8 @@ add_message_files(
   FILES
   StairInfo.msg
   Attitude.msg
-  # Message1.msg
-  # Message2.msg
+  ServoLeft.msg
+  ServoRight.msg
 )
 
 ## Generate services in the 'srv' folder
