@@ -55,7 +55,7 @@ import std_msgs.msg
 
 def livox_callback(msg):
     global last_pub_time
-    threshold = 0.18
+    threshold = 0.10
     filtered_points = []
 
     now = rospy.Time.now()
