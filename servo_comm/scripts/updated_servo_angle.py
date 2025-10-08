@@ -4,27 +4,24 @@
 import rospy
 import serial
 import time
-from stair_detection.msg import ServoLeft
-from stair_detection.msg import ServoRight
+from stair_detection.msg import ServoLeft, ServoRight
 
 class DualAngleSerialSender:
     def __init__(self):
         # ---- Params
-        self.port = rospy.get_param('~serial_port', '/dev/ttyACM2')
+        self.port = rospy.get_param('~serial_port', '/dev/ttyACM0')
         self.baud = int(rospy.get_param('~baud', 9600))
-        self.startup_wait = float(rospy.get_param('~startup_wait', 2.0))   # Arduino reset delay
-        self.threshold_m = float(rospy.get_param('~threshold_m', 0.30))    # (unused here)
-        self.min_interval_s = float(rospy.get_param('~min_interval_s', 0.05))  # overall rate limit
+        self.startup_wait = float(rospy.get_param('~startup_wait', 2.0))
+        self.min_interval_s = float(rospy.get_param('~min_interval_s', 0.05))
         self.angle_min = int(rospy.get_param('~angle_min', 0))
         self.angle_max = int(rospy.get_param('~angle_max', 180))
         self.init_low_angle  = int(rospy.get_param('~init_low_angle',  90))
         self.init_high_angle = int(rospy.get_param('~init_high_angle', 90))
+        self.hysteresis_deg  = int(rospy.get_param('~hysteresis_deg', 3))
 
-        # ---- State
+        # ---- State (last accepted values)
         self.low_angle  = self._clamp(self.init_low_angle)
         self.high_angle = self._clamp(self.init_high_angle)
-        self.low_dist   = float('inf')
-        self.high_dist  = float('inf')
         self.last_send_time = rospy.Time(0)
 
         # ---- Serial
@@ -37,19 +34,21 @@ class DualAngleSerialSender:
             raise
 
         # ---- Subs
-        rospy.Subscriber('/log_info_low',  ServoLeft,  self.cb_low,  queue_size=10)
-        rospy.Subscriber('/log_info_high', ServoRight, self.cb_high, queue_size=10)
+        rospy.Subscriber('/log_info_left',  ServoLeft,  self.cb_left,  queue_size=10)
+        rospy.Subscriber('/log_info_right', ServoRight, self.cb_right, queue_size=10)
 
     # ---------- callbacks ----------
-    def cb_low(self, msg: ServoLeft):
+    def cb_left(self, msg: ServoLeft):
         if hasattr(msg, 'angle') and msg.angle is not None:
-            self.low_angle = self._clamp(msg.angle)
+            new_val = self._clamp(msg.angle)
+            self.low_angle = self._apply_hysteresis(new_val, self.low_angle, self.hysteresis_deg)
 
-    def cb_high(self, msg: ServoRight):
+    def cb_right(self, msg: ServoRight):
         if hasattr(msg, 'angle') and msg.angle is not None:
-            self.high_angle = self._clamp(msg.angle)
+            new_val = self._clamp(msg.angle)
+            self.high_angle = self._apply_hysteresis(new_val, self.high_angle, self.hysteresis_deg)
 
-    # ---------- helper ----------
+    # ---------- helpers ----------
     def _clamp(self, v):
         try:
             a = int(round(float(v)))
@@ -59,30 +58,30 @@ class DualAngleSerialSender:
         if a > self.angle_max: a = self.angle_max
         return a
 
+    def _apply_hysteresis(self, new_val, prev_val, thresh):
+        """Return prev_val when change is small; otherwise accept new_val."""
+        return prev_val if abs(new_val - prev_val) <= thresh else new_val
 
 if __name__ == '__main__':
     rospy.init_node('dual_angle_serial_sender')
     node = DualAngleSerialSender()
 
-    # simple loop that sends "low high\n" at the requested interval
+    # Send "low high\n" at a throttled rate
     rate_hz = 1.0 / node.min_interval_s if node.min_interval_s > 0.0 else 50.0
     rate = rospy.Rate(rate_hz)
 
     while not rospy.is_shutdown():
-        # Only send if both angles are known
-        if node.low_angle is not None and node.high_angle is not None:
-            # BYPASS: skip sending when both angles are zero
-            if node.low_angle == 0 and node.high_angle == 0:
-                rate.sleep()
-                continue
+        # Optional: skip if both zero
+        if node.low_angle == 0 and node.high_angle == 0:
+            rate.sleep(); continue
 
-            now = rospy.Time.now()
-            if (now - node.last_send_time).to_sec() >= node.min_interval_s:
-                line = f"{int(node.low_angle)} {int(node.high_angle)}\n"
-                try:
-                    node.ser.write(line.encode('ascii'))
-                    node.last_send_time = now
-                    rospy.loginfo(f"[SEND] {line.strip()}")
-                except Exception as e:
-                    rospy.logerr(f"[SERIAL] Write failed: {e}")
+        now = rospy.Time.now()
+        if (now - node.last_send_time).to_sec() >= node.min_interval_s:
+            line = f"{int(node.low_angle)} {int(node.high_angle)}\n"
+            try:
+                node.ser.write(line.encode('ascii'))
+                node.last_send_time = now
+                rospy.loginfo(f"[SEND] {line.strip()}")
+            except Exception as e:
+                rospy.logerr(f"[SERIAL] Write failed: {e}")
         rate.sleep()
